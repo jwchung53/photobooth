@@ -1,0 +1,47 @@
+# Byte-compiled / optimized
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# uv
+.uv/
+
+# Project runtime output
+output/
+logs/
+*.log
+
+# PyInstaller
+*.spec
+*.manifest
+
+# Test / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.ruff_cache/
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Claude Code - 개인 로컬 설정 (공유 X)
+.claude/settings.local.json
+
+# Keep placeholder dirs but ignore their contents
+!output/.gitkeep
+!logs/.gitkeep

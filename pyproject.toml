@@ -1,0 +1,50 @@
+[project]
+name = "photobooth"
+version = "0.1.0"
+description = "Windows kiosk emotion photo booth - capture, emotion analysis, frame composition, print"
+readme = "README.md"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "pyqt6>=6.6",
+    "opencv-python>=4.9",
+    "deepface>=0.0.90",
+    "retina-face>=0.0.17",
+    "pillow>=10.2",
+    "pywin32>=306",
+    "pygame>=2.5",
+    "pyyaml>=6.0",
+    "numpy>=1.26,<2.0",
+    "pygrabber>=0.2",
+    # DeepFace backend. Windows 네이티브 tensorflow는 이미 CPU 전용.
+    # PyPI의 tensorflow는 메타패키지라 실제 코드는 tensorflow-intel이 담고 있고,
+    # uv가 이 전이 의존성을 자동으로 끌어오지 않으므로 win32에 명시적으로 고정.
+    "tensorflow>=2.15,<2.17",
+    "tensorflow-intel>=2.15,<2.17 ; sys_platform == 'win32'",
+    # TF 2.16+는 Keras 3 기본 탑재 -> DeepFace는 Keras 2 API(tf-keras) 필요
+    "tf-keras>=2.15,<2.17",
+    # tensorflow-io-gcs-filesystem는 0.31.0 이후 Windows 휠 미제공 -> 고정
+    "tensorflow-io-gcs-filesystem==0.31.0 ; sys_platform == 'win32'",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.3",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
