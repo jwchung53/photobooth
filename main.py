@@ -1,7 +1,7 @@
 """Emotion Photo Booth - application entry point.
 
-Bootstraps configuration and logging, then announces the current phase.
-Actual capture / analysis / compose / print flows are added in later phases.
+Bootstraps configuration and logging, then launches the PyQt6 kiosk UI.
+(The Phase 1 console pipeline still lives in ``phase1_pipeline.py``.)
 """
 
 from __future__ import annotations
@@ -17,23 +17,26 @@ def main() -> int:
     try:
         config = Config.load()
     except FileNotFoundError as exc:
-        # 로거가 아직 없으므로 표준 출력으로 안내
         print(f"[치명적] {exc}", file=sys.stderr)
         return 1
 
     # 2) 로거 초기화
     setup_logging(config)
     log = get_logger("main")
+    log.info("감정 포토부스 GUI 시작")
 
-    # 3) 시작 안내
-    log.info("=" * 50)
-    log.info("Emotion Photo Booth 시작")
-    log.info("설정 파일: %s", config.source)
-    log.info("Phase 1부터 시작합니다")
-    log.info("=" * 50)
+    # 3) PyQt 앱 실행 (지연 임포트: GUI 미사용 경로에서 비용 회피)
+    from PyQt6.QtWidgets import QApplication
 
-    print("Phase 1부터 시작합니다")
-    return 0
+    from src.ui.main_window import MainWindow
+
+    app = QApplication(sys.argv)
+    window = MainWindow()
+    window.showFullScreen()
+    exit_code = app.exec()
+
+    log.info("감정 포토부스 종료 (code=%d)", exit_code)
+    return exit_code
 
 
 if __name__ == "__main__":
