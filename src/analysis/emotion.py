@@ -109,6 +109,61 @@ class EmotionAnalyzer:
             if min_confidence is not None
             else float(cfg.get("analysis.min_face_confidence", 0.9))
         )
+        self.rel_size_ratio = float(cfg.get("analysis.rel_size_ratio", 0.35))
+        self.min_area_pct = float(cfg.get("analysis.min_face_area_pct", 0.8))
+        self.dedup_iou = float(cfg.get("analysis.dedup_iou", 0.4))
+        self.neutral_bias = float(cfg.get("analysis.neutral_bias", 0.5))
+
+    def _pick_dominant(self, scores: dict) -> str:
+        """Pick the dominant emotion, discounting neutral so expressions surface."""
+        if not scores:
+            return "neutral"
+        adjusted = dict(scores)
+        if "neutral" in adjusted:
+            adjusted["neutral"] *= self.neutral_bias
+        return max(adjusted, key=adjusted.get)
+
+    @staticmethod
+    def _iou(a: tuple, b: tuple) -> float:
+        """Intersection-over-union of two (x, y, w, h) boxes."""
+        ax, ay, aw, ah = a
+        bx, by, bw, bh = b
+        ix1, iy1 = max(ax, bx), max(ay, by)
+        ix2, iy2 = min(ax + aw, bx + bw), min(ay + ah, by + bh)
+        inter = max(0, ix2 - ix1) * max(0, iy2 - iy1)
+        union = aw * ah + bw * bh - inter
+        return inter / union if union > 0 else 0.0
+
+    def _postprocess(self, faces: list["FaceResult"], img_w: int, img_h: int) -> list["FaceResult"]:
+        """Merge duplicate boxes, then drop background faces by relative size.
+
+        The largest face is always kept (so a valid poser is never filtered to
+        zero); others must be a big-enough fraction of the largest AND above a
+        tiny absolute floor.
+        """
+        if not faces:
+            return faces
+        # 1) 중복 박스 제거 (큰 얼굴 우선)
+        deduped: list[FaceResult] = []
+        for f in sorted(faces, key=lambda f: f.box[2] * f.box[3], reverse=True):
+            if all(self._iou(f.box, k.box) < self.dedup_iou for k in deduped):
+                deduped.append(f)
+        if not deduped:
+            return deduped
+
+        # 2) 상대 크기 필터 (가장 큰 얼굴 기준) - 최대 얼굴은 항상 유지
+        largest = deduped[0]  # 면적 내림차순 정렬됨
+        max_area = largest.box[2] * largest.box[3] or 1
+        img_area = (img_w * img_h) or 1
+        out: list[FaceResult] = [largest]
+        for f in deduped[1:]:
+            area = f.box[2] * f.box[3]
+            if area < max_area * self.rel_size_ratio:
+                continue  # 가장 큰 얼굴 대비 너무 작음 (먼 배경)
+            if (area / img_area * 100) < self.min_area_pct:
+                continue  # 순수 노이즈
+            out.append(f)
+        return out
 
     def analyze(self, image_bgr) -> list[FaceResult]:
         """Detect faces and analyze emotion. Returns [] on failure/no face."""
@@ -169,8 +224,8 @@ class EmotionAnalyzer:
             if confidence and confidence < self.min_confidence:
                 continue
 
-            emotion = str(item.get("dominant_emotion", "neutral"))
             scores = {k: float(v) for k, v in (item.get("emotion", {}) or {}).items()}
+            emotion = self._pick_dominant(scores)  # neutral 억제 반영
             faces.append(
                 FaceResult(
                     box=box,
@@ -181,7 +236,59 @@ class EmotionAnalyzer:
                 )
             )
 
+        before = len(faces)
+        faces = self._postprocess(faces, img_w, img_h)
+        if before != len(faces):
+            log.info("후처리: %d개 -> %d개 (크기/중복 필터)", before, len(faces))
         log.info("감정 분석 완료: 얼굴 %d개 검출", len(faces))
+        return faces
+
+    def analyze_stabilized(self, frames: list) -> list["FaceResult"]:
+        """Detect on the last frame, then vote each face's emotion across the
+        burst of frames (emotion-only crops - cheap) to reduce single-frame noise.
+        """
+        if not frames:
+            return []
+        primary = frames[-1]
+        faces = self.analyze(primary)  # 검출 + 기본 감정 + 후처리
+        extra = frames[:-1]
+        if not faces or not extra:
+            return faces
+
+        try:
+            from deepface import DeepFace
+        except Exception:  # noqa: BLE001
+            return faces
+
+        for face in faces:
+            x, y, w, h = face.box
+            acc = {k: float(v) for k, v in face.scores.items()}  # primary 포함
+            votes = 1
+            for fr in extra:
+                fh, fw = fr.shape[:2]
+                cx1, cy1 = max(0, x), max(0, y)
+                cx2, cy2 = min(fw, x + w), min(fh, y + h)
+                if cx2 - cx1 < 20 or cy2 - cy1 < 20:
+                    continue
+                crop = fr[cy1:cy2, cx1:cx2]
+                try:
+                    r = DeepFace.analyze(
+                        crop, actions=["emotion"], detector_backend="skip",
+                        enforce_detection=False, silent=True,
+                    )
+                    scores = (r[0] if isinstance(r, list) else r).get("emotion", {})
+                    for k, v in scores.items():
+                        acc[k] = acc.get(k, 0.0) + float(v)
+                    votes += 1
+                except Exception:  # noqa: BLE001
+                    continue
+            if votes > 1 and acc:
+                averaged = {k: val / votes for k, val in acc.items()}
+                dominant = self._pick_dominant(averaged)  # neutral 억제 반영
+                face.dominant_emotion = dominant
+                face.frame_category = map_emotion_to_frame(dominant)
+                face.scores = averaged
+        log.info("감정 안정화: %d프레임 투표", len(frames))
         return faces
 
 

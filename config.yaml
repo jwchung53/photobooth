@@ -24,6 +24,11 @@ analysis:
   # (opencv는 빠르나 정면만 잘 잡고 다중 얼굴을 자주 놓침, retinaface는 CPU ~25초로 느림)
   detector_backend: mtcnn
   min_face_confidence: 0.7        # 이 값 미만 검출은 무시
+  rel_size_ratio: 0.35            # 가장 큰 얼굴 대비 이 비율 미만은 무시 (배경 얼굴 제거, 최대 얼굴은 항상 유지)
+  min_face_area_pct: 0.8          # 절대 하한: 이미지 대비 이 % 미만은 무시 (최대 얼굴 제외, 순수 노이즈 제거)
+  dedup_iou: 0.4                  # 이 값 이상 겹치는 박스는 중복으로 보고 통합
+  emotion_frames: 5               # 감정 안정화: 셔터 순간 이 수만큼 프레임을 투표 (1이면 단일)
+  neutral_bias: 0.5               # neutral 점수 가중치 (<1이면 무표정 억제 -> 표정 더 잘 살림)
 
 compose:
   output_size: [1800, 1200]      # 결과 캔버스 px (6x4 inch @ 300dpi, 가로형)
@@ -33,6 +38,20 @@ compose:
 
 pipeline:
   countdown: 3                   # 촬영 전 카운트다운 초
+
+kiosk:
+  idle_timeout_ms: 60000       # 무입력 시 대기 화면 복귀까지 (60초)
+  hide_cursor: true            # 마우스 커서 숨김
+  prevent_sleep: true          # Windows 절전/화면보호기 방지
+  stay_on_top: true            # 항상 위 (최소화/창 이동 방지)
+  admin_shortcut: "Ctrl+Shift+Q"  # 종료 단축키 (참고용, 코드에 하드코딩)
+  auto_reset_on_error: true    # 에러 시 자동으로 대기 화면 복귀
+  error_display_seconds: 3     # 에러 메시지 표시 시간
+
+retry:
+  camera_max_attempts: 3       # 카메라 시작 재시도 횟수
+  camera_retry_delay_ms: 1000  # 재시도 간격
+  analysis_max_attempts: 2     # 분석 재시도 횟수
 
 logging:
   level: INFO             # DEBUG | INFO | WARNING | ERROR

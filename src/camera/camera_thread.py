@@ -7,6 +7,8 @@ recent frame so the capture moment can grab a still with ``get_latest_frame``.
 
 from __future__ import annotations
 
+from collections import deque
+
 import cv2
 import numpy as np
 
@@ -38,6 +40,8 @@ class CameraThread(QThread):
         self.warmup_frames = int(cfg.get("camera.warmup_frames", 5))
         self._running = False
         self._latest: np.ndarray | None = None
+        # 감정 안정화용 최근 프레임 버퍼
+        self._recent: deque[np.ndarray] = deque(maxlen=10)
 
     def _open(self) -> cv2.VideoCapture | None:
         """Open the configured index; fall back to auto-detection."""
@@ -85,6 +89,7 @@ class CameraThread(QThread):
                     self.msleep(interval_ms)
                     continue
                 self._latest = frame
+                self._recent.append(frame)
                 # 소비자(GUI 스레드)가 안전하게 쓰도록 복사본 전달
                 self.frame_ready.emit(frame.copy())
                 self.msleep(interval_ms)
@@ -96,11 +101,16 @@ class CameraThread(QThread):
         """Return a copy of the most recent frame (for the capture moment)."""
         return None if self._latest is None else self._latest.copy()
 
+    def get_recent_frames(self, n: int) -> list[np.ndarray]:
+        """Return copies of up to the last ``n`` frames (for emotion voting)."""
+        return [f.copy() for f in list(self._recent)[-n:]]
+
     def begin(self) -> None:
         """Start streaming (idempotent)."""
         if not self.isRunning():
             self._running = True
             self._latest = None
+            self._recent.clear()
             self.start()
 
     def stop(self) -> None:

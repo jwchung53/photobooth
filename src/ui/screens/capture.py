@@ -34,6 +34,7 @@ class CaptureScreen(QWidget):
     """Live preview + prepare + countdown. Emits ``photo_captured(np.ndarray)``."""
 
     photo_captured = pyqtSignal(np.ndarray)
+    camera_failed = pyqtSignal()  # 재시도 모두 실패 -> 대기 화면 복귀 요청
 
     def __init__(self) -> None:
         super().__init__()
@@ -45,6 +46,15 @@ class CaptureScreen(QWidget):
         self._prepare_ms = int(float(cfg.get("capture.prepare_seconds", 5)) * 1000)
         self._countdown_start = int(cfg.get("capture.countdown_seconds", 3))
         self.count = self._countdown_start
+
+        # 카메라 재시도 설정
+        self._camera_max = int(cfg.get("retry.camera_max_attempts", 3))
+        self._camera_delay = int(cfg.get("retry.camera_retry_delay_ms", 1000))
+        self._camera_attempts = 0
+
+        # 감정 안정화용 버스트 프레임 수
+        self._emotion_frames = int(cfg.get("analysis.emotion_frames", 5))
+        self.captured_burst: list = []
 
         # 준비 타이머(단발) + 카운트다운 타이머(1초 반복)
         self._prepare_timer = QTimer(self)
@@ -104,6 +114,7 @@ class CaptureScreen(QWidget):
         self.number.hide()
         self.flash.hide()
         self.count = self._countdown_start
+        self._camera_attempts = 0
 
         self.camera.frame_ready.connect(self.update_preview)
         self.camera.error.connect(self.on_camera_error)
@@ -140,9 +151,25 @@ class CaptureScreen(QWidget):
         self.preview.setPixmap(pix)
 
     def on_camera_error(self, message: str) -> None:
-        """Slot: camera unavailable - friendly message, keep flow alive."""
-        log.warning("촬영 화면 카메라 오류: %s", message)
-        self.preview.setText(message)
+        """Slot: camera error - retry a few times, then bail to attract."""
+        self._camera_attempts += 1
+        log.warning(
+            "카메라 오류(%d/%d): %s", self._camera_attempts, self._camera_max, message
+        )
+        if self._camera_attempts < self._camera_max:
+            self.preview.setText("카메라를 준비 중입니다...")
+            QTimer.singleShot(self._camera_delay, self._retry_camera)
+        else:
+            self.preview.setText("카메라 연결을 확인해주세요")
+            QTimer.singleShot(1500, self.camera_failed.emit)
+
+    def _retry_camera(self) -> None:
+        """Restart the camera thread (only while this screen is visible)."""
+        if not self.isVisible():
+            return
+        log.info("카메라 재시도 %d/%d", self._camera_attempts, self._camera_max)
+        self.camera.stop()
+        self.camera.begin()
 
     # ---- 준비 -> 카운트다운 -> 촬영 ------------------------------------
     def start_countdown(self) -> None:
@@ -165,8 +192,10 @@ class CaptureScreen(QWidget):
             QTimer.singleShot(_SNAP_MS, self.capture_photo)
 
     def capture_photo(self) -> None:
-        """Flash, grab the latest frame, play the shutter, and emit it."""
-        frame = self.camera.get_latest_frame()
+        """Flash, grab a burst of frames, play the shutter, and emit the photo."""
+        # 감정 안정화용 최근 N프레임 확보 (마지막 프레임을 대표 사진으로)
+        burst = self.camera.get_recent_frames(self._emotion_frames)
+        frame = burst[-1] if burst else self.camera.get_latest_frame()
         self.sound.shutter()
 
         # 흰색 플래시 200ms
@@ -180,8 +209,10 @@ class CaptureScreen(QWidget):
             # 카메라 미연결 등: 크래시 대신 검은 프레임으로 흐름 유지
             log.warning("캡처할 프레임이 없어 검은 프레임으로 대체")
             frame = np.zeros((_PREVIEW_H, _PREVIEW_W, 3), dtype=np.uint8)
+            burst = [frame]
 
-        log.info("사진 캡처 완료 (shape=%s)", frame.shape)
+        self.captured_burst = burst
+        log.info("사진 캡처 완료 (대표 shape=%s, 버스트 %d장)", frame.shape, len(burst))
         # 플래시가 잠깐 보인 뒤 다음 화면으로
         QTimer.singleShot(_FLASH_MS, lambda: self.photo_captured.emit(frame))
 

@@ -13,7 +13,7 @@ import numpy as np
 from PyQt6.QtCore import QThread, pyqtSignal
 
 from src.analysis.emotion import EmotionAnalyzer
-from src.utils.logger import get_logger
+from src.utils.logger import get_logger, log_duration
 
 log = get_logger(__name__)
 
@@ -30,15 +30,18 @@ class AnalysisThread(QThread):
     finished_all = pyqtSignal(list)            # [{bbox, emotion, category, ...}, ...]
     error_occurred = pyqtSignal(str)
 
-    def __init__(self, photo: np.ndarray) -> None:
+    def __init__(self, photo: np.ndarray, frames: list | None = None) -> None:
         super().__init__()
         self.photo = photo
+        # 감정 안정화용 버스트 프레임 (없으면 단일 프레임으로 처리)
+        self.frames = frames if frames else [photo]
 
     def run(self) -> None:  # QThread 진입점 (별도 스레드)
         try:
             self.progress.emit(10, "얼굴을 찾는 중...")
             analyzer = EmotionAnalyzer()
-            faces = analyzer.analyze(self.photo)  # 검출 + 감정 (한 번에)
+            with log_duration(log, "얼굴 검출+감정 분석"):
+                faces = analyzer.analyze_stabilized(self.frames)  # 검출 + 감정 투표
 
             if not faces:
                 log.info("얼굴 미검출")

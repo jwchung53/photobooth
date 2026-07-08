@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import logging
 import sys
-from logging.handlers import RotatingFileHandler
+import time
+from contextlib import contextmanager
+from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 
 from src.utils.config import PROJECT_ROOT, Config, get_config
@@ -17,9 +19,9 @@ from src.utils.config import PROJECT_ROOT, Config, get_config
 _LOG_FORMAT = "%(asctime)s | %(levelname)-7s | %(name)s | %(message)s"
 _DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
-# 로그 파일 회전 기준 (매직 넘버 상수화)
-_MAX_BYTES = 5 * 1024 * 1024  # 5 MB
-_BACKUP_COUNT = 3
+# 로그 파일 회전: 매일 자정 새 파일, 30일 보관
+_ROTATE_WHEN = "midnight"
+_BACKUP_DAYS = 30
 
 _configured = False
 
@@ -65,8 +67,8 @@ def setup_logging(config: Config | None = None) -> logging.Logger:
 
     formatter = logging.Formatter(_LOG_FORMAT, datefmt=_DATE_FORMAT)
 
-    file_handler = RotatingFileHandler(
-        log_path, maxBytes=_MAX_BYTES, backupCount=_BACKUP_COUNT, encoding="utf-8"
+    file_handler = TimedRotatingFileHandler(
+        log_path, when=_ROTATE_WHEN, backupCount=_BACKUP_DAYS, encoding="utf-8"
     )
     file_handler.setFormatter(formatter)
 
@@ -86,6 +88,16 @@ def get_logger(name: str) -> logging.Logger:
     if not _configured:
         setup_logging()
     return logging.getLogger(name)
+
+
+@contextmanager
+def log_duration(logger: logging.Logger, label: str):
+    """Context manager that logs how long a step took (performance logging)."""
+    start = time.monotonic()
+    try:
+        yield
+    finally:
+        logger.info("⏱ %s: %.2f초", label, time.monotonic() - start)
 
 
 if __name__ == "__main__":
