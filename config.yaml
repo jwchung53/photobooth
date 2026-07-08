@@ -20,8 +20,10 @@ frames:
   dir: assets/frames  # 감정별 프레임 이미지 폴더
 
 analysis:
-  detector_backend: retinaface  # DeepFace 얼굴 검출 백엔드
-  min_face_confidence: 0.9       # 이 값 미만 검출은 무시 (오검출 제거)
+  # 검출 백엔드: mtcnn — 딥러닝 기반, 다중 얼굴/각진 얼굴에 강하고 CPU에서 ~1-2초.
+  # (opencv는 빠르나 정면만 잘 잡고 다중 얼굴을 자주 놓침, retinaface는 CPU ~25초로 느림)
+  detector_backend: mtcnn
+  min_face_confidence: 0.7        # 이 값 미만 검출은 무시
 
 compose:
   output_size: [1800, 1200]      # 결과 캔버스 px (6x4 inch @ 300dpi, 가로형)

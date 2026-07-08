@@ -28,24 +28,40 @@ class AttractScreen(QWidget):
         title.setStyleSheet(theme.label_style(80, theme.WHITE))
         layout.addWidget(title)
 
-        subtitle = QLabel("친구들과 함께 찍어보세요!")
-        subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        subtitle.setStyleSheet(theme.label_style(30, theme.WHITE, bold=False))
-        layout.addWidget(subtitle)
+        self.subtitle = QLabel("친구들과 함께 찍어보세요!")
+        self.subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.subtitle.setStyleSheet(theme.label_style(30, theme.WHITE, bold=False))
+        layout.addWidget(self.subtitle)
 
         layout.addStretch(1)
 
         # 중앙 원형 [촬영 시작] 버튼 (200x200)
-        start_btn = QPushButton("촬영\n시작")
-        start_btn.setFixedSize(200, 200)
-        start_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        start_btn.setStyleSheet(
+        self.start_btn = QPushButton("촬영\n시작")
+        self.start_btn.setFixedSize(200, 200)
+        self.start_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.start_btn.setStyleSheet(
             theme.button_style(theme.PINK, size_px=34, radius=100, padding="0px")
         )
-        start_btn.clicked.connect(self.start_capture.emit)
-        layout.addWidget(start_btn, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.start_btn.clicked.connect(self.start_capture.emit)
+        layout.addWidget(self.start_btn, alignment=Qt.AlignmentFlag.AlignCenter)
 
         layout.addStretch(2)
+
+    def set_ready(self, ready: bool) -> None:
+        """Enable the start button once analysis models are warmed up."""
+        self.start_btn.setEnabled(ready)
+        if ready:
+            self.start_btn.setText("촬영\n시작")
+            self.start_btn.setStyleSheet(
+                theme.button_style(theme.PINK, size_px=34, radius=100, padding="0px")
+            )
+            self.subtitle.setText("친구들과 함께 찍어보세요!")
+        else:
+            self.start_btn.setText("준비\n중...")
+            self.start_btn.setStyleSheet(
+                theme.button_style(theme.GRAY_BTN, size_px=30, radius=100, padding="0px")
+            )
+            self.subtitle.setText("잠시만 기다려주세요...")
 
 
 if __name__ == "__main__":

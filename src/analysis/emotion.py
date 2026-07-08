@@ -30,7 +30,7 @@ DEFAULT_FRAME = "chill"
 # 다인 촬영 시 대표 프레임 선정 tie-break 우선순위 (긍정 우선)
 FRAME_PRIORITY: list[str] = ["joy", "wow", "chill", "calm", "cool"]
 
-# 감정 한글 표기 (콘솔/디버그 출력용)
+# 감정 한글 표기 (콘솔/디버그/UI 라벨용)
 EMOTION_KO: dict[str, str] = {
     "happy": "행복",
     "surprise": "놀람",
@@ -39,6 +39,17 @@ EMOTION_KO: dict[str, str] = {
     "disgust": "불쾌",
     "fear": "두려움",
     "neutral": "무표정",
+}
+
+# 감정 이모지 (분석 화면 팝업 / 미리보기 라벨용)
+EMOTION_EMOJI: dict[str, str] = {
+    "happy": "😊",
+    "surprise": "😮",
+    "sad": "😢",
+    "angry": "😠",
+    "disgust": "🤢",
+    "fear": "😨",
+    "neutral": "😐",
 }
 
 
@@ -124,6 +135,12 @@ class EmotionAnalyzer:
         if isinstance(raw, dict):
             raw = [raw]
 
+        # 원본 크기 (무검출 fallback 판별용)
+        try:
+            img_h, img_w = image_bgr.shape[:2]
+        except Exception:  # noqa: BLE001
+            img_h, img_w = 0, 0
+
         faces: list[FaceResult] = []
         for item in raw:
             region = item.get("region", {}) or {}
@@ -136,8 +153,20 @@ class EmotionAnalyzer:
             confidence = float(
                 item.get("face_confidence", region.get("face_confidence", 0.0)) or 0.0
             )
-            # 검출 실패(전체 이미지 fallback) 또는 저신뢰 검출 제거
-            if box[2] <= 0 or box[3] <= 0 or confidence < self.min_confidence:
+            if box[2] <= 0 or box[3] <= 0:
+                continue
+            # 무검출 시 DeepFace가 전체 이미지를 얼굴로 반환하는 fallback 제거 (기하학적 판별)
+            if (
+                img_w
+                and box[0] == 0
+                and box[1] == 0
+                and box[2] >= img_w * 0.98
+                and box[3] >= img_h * 0.98
+            ):
+                continue
+            # 신뢰도 필터는 백엔드가 신뢰도를 제공할 때만 적용
+            # (opencv 등은 face_confidence=0 -> 필터 건너뜀)
+            if confidence and confidence < self.min_confidence:
                 continue
 
             emotion = str(item.get("dominant_emotion", "neutral"))
