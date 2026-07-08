@@ -1,9 +1,14 @@
 """Main kiosk window - hosts the 5 screens in a QStackedWidget and wires
 their signals into the attract -> capture -> analysis -> preview -> printing
 flow. Frameless full-screen; ESC quits.
+
+The camera lives inside the capture screen (started/stopped via its show/hide
+events); here we just relay the captured photo forward.
 """
 
 from __future__ import annotations
+
+import numpy as np
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QKeySequence, QShortcut
@@ -25,6 +30,7 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("감정 포토부스")
+        self.captured_photo: np.ndarray | None = None  # 다음 Phase(분석)에서 사용
 
         self.stack = QStackedWidget()
         self.setCentralWidget(self.stack)
@@ -58,11 +64,18 @@ class MainWindow(QMainWindow):
     def _wire_signals(self) -> None:
         """Connect each screen's signal to the next screen transition."""
         self.attract.start_capture.connect(lambda: self._go(self.capture))
-        self.capture.analysis_needed.connect(lambda: self._go(self.analysis))
+        self.capture.photo_captured.connect(self.on_photo_captured)
         self.analysis.analysis_done.connect(lambda: self._go(self.preview))
         self.preview.print_start.connect(lambda: self._go(self.printing))
         self.preview.restart.connect(lambda: self._go(self.attract))
         self.printing.return_to_attract.connect(lambda: self._go(self.attract))
+
+    def on_photo_captured(self, frame: np.ndarray) -> None:
+        """Store the captured photo and move on to the analysis screen."""
+        self.captured_photo = frame
+        self.analysis.set_photo(frame)
+        log.info("사진 수신 (shape=%s) -> 분석 화면", frame.shape)
+        self._go(self.analysis)
 
     def _go(self, screen: QWidget) -> None:
         """Switch to a screen and kick off its animation, if any."""
@@ -71,6 +84,11 @@ class MainWindow(QMainWindow):
         start = getattr(screen, "start", None)
         if callable(start):
             start()
+
+    def closeEvent(self, event) -> None:
+        """Ensure the camera thread is stopped on shutdown."""
+        self.capture.camera.stop()
+        super().closeEvent(event)
 
 
 if __name__ == "__main__":

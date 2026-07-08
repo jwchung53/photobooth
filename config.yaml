@@ -2,10 +2,15 @@
 # 모든 튜닝 값은 여기서 관리한다 (코드 하드코딩 금지)
 
 camera:
-  index: 0          # 카메라 장치 인덱스 (여러 대일 경우 조정)
-  width: 1920       # 캡처 해상도 가로
-  height: 1080      # 캡처 해상도 세로
-  fps: 30           # 목표 프레임레이트
+  index: 1            # 카메라 장치 인덱스 (0=Mirametrix 가상카메라, 1=실제 LGE 웹캠)
+  width: 1280         # 캡처 해상도 가로
+  height: 720         # 캡처 해상도 세로
+  fps: 30             # 목표 프레임레이트
+  warmup_frames: 5    # 노출 안정화를 위해 버릴 초기 프레임 수
+
+capture:
+  prepare_seconds: 5     # 촬영 화면 진입 후 "자세를 잡아주세요!" 준비 시간
+  countdown_seconds: 3   # 3-2-1 카운트다운 시작 값
 
 output:
   dir: output       # 결과 이미지 저장 폴더

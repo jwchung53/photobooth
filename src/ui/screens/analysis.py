@@ -20,9 +20,14 @@ class AnalysisScreen(QWidget):
         super().__init__()
         theme.apply_background(self, theme.SOFT)
         self._progress = 0
+        self._photo = None  # 촬영된 이미지 (다음 Phase에서 실제 분석에 사용)
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._tick)
         self._build()
+
+    def set_photo(self, frame) -> None:
+        """Store the captured photo. Actual analysis/display comes next Phase."""
+        self._photo = frame
 
     def _build(self) -> None:
         layout = QVBoxLayout(self)
