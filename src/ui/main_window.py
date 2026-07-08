@@ -48,10 +48,11 @@ class MainWindow(QMainWindow):
         QEvent.Type.TouchBegin,
     })
 
-    def __init__(self) -> None:
+    def __init__(self, kiosk: bool = True) -> None:
         super().__init__()
         self.setWindowTitle("감정 포토부스")
         self.captured_photo: np.ndarray | None = None
+        self._kiosk = kiosk  # False면 개발용 일반 창(이동/X종료 가능)
 
         cfg = get_config()
         self._hide_cursor = bool(cfg.get("kiosk.hide_cursor", True))
@@ -77,11 +78,12 @@ class MainWindow(QMainWindow):
         self.camera = self.capture.camera
         self._wire_signals()
 
-        # ---- 키오스크 모드 ----
-        flags = Qt.WindowType.FramelessWindowHint
-        if bool(cfg.get("kiosk.stay_on_top", True)):
-            flags |= Qt.WindowType.WindowStaysOnTopHint
-        self.setWindowFlags(flags)
+        # ---- 키오스크 모드 (개발 모드에선 일반 창) ----
+        if self._kiosk:
+            flags = Qt.WindowType.FramelessWindowHint
+            if bool(cfg.get("kiosk.stay_on_top", True)):
+                flags |= Qt.WindowType.WindowStaysOnTopHint
+            self.setWindowFlags(flags)
 
         # 무입력 자동 복귀 타이머 + 앱 전체 입력 감지
         self.idle = IdleTimer(int(cfg.get("kiosk.idle_timeout_ms", 60000)), self)
@@ -192,8 +194,9 @@ class MainWindow(QMainWindow):
             kiosk_utils.hide_cursor()
 
     def closeEvent(self, event) -> None:
-        # 관리자 승인(_allow_close) 없이는 종료 차단 (Alt+F4 등 무시)
-        if not self._allow_close:
+        # 키오스크 모드에선 관리자 승인(_allow_close) 없이 종료 차단 (Alt+F4 등 무시)
+        # 개발 모드(_kiosk=False)에선 창 X 버튼으로 바로 종료 허용
+        if self._kiosk and not self._allow_close:
             log.info("종료 시도 차단 (Ctrl+Shift+Q로만 종료)")
             event.ignore()
             return

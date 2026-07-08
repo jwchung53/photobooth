@@ -8,6 +8,7 @@ the PyQt6 kiosk UI, and restores the environment on exit.
 
 from __future__ import annotations
 
+import os
 import sys
 import threading
 
@@ -75,12 +76,17 @@ def main() -> int:
     log = get_logger("main")
     log.info("감정 포토부스 GUI 시작")
 
-    # 3) 키오스크 환경 설정
+    # 개발 모드: PHOTOBOOTH_DEV=1 이면 일반 창(커서 보임, X로 종료, 키오스크 잠금 해제)
+    dev_mode = os.environ.get("PHOTOBOOTH_DEV") == "1"
+    log.info("실행 모드: %s", "개발(창)" if dev_mode else "키오스크(풀스크린)")
+
+    # 3) 키오스크 환경 설정 (개발 모드에선 건너뜀)
     from src.utils import kiosk_utils
 
-    kiosk_utils.set_process_priority_high()
-    if bool(config.get("kiosk.prevent_sleep", True)):
-        kiosk_utils.prevent_sleep()
+    if not dev_mode:
+        kiosk_utils.set_process_priority_high()
+        if bool(config.get("kiosk.prevent_sleep", True)):
+            kiosk_utils.prevent_sleep()
 
     # 4) PyQt 앱 실행 (지연 임포트)
     from PyQt6.QtWidgets import QApplication
@@ -88,10 +94,14 @@ def main() -> int:
     from src.ui.main_window import MainWindow
 
     app = QApplication(sys.argv)
-    window = MainWindow()
-    if bool(config.get("kiosk.hide_cursor", True)):
-        kiosk_utils.hide_cursor()
-    window.showFullScreen()
+    window = MainWindow(kiosk=not dev_mode)
+    if dev_mode:
+        window.resize(1280, 800)
+        window.show()
+    else:
+        if bool(config.get("kiosk.hide_cursor", True)):
+            kiosk_utils.hide_cursor()
+        window.showFullScreen()
 
     # 5) 백그라운드 워밍업 (완료 시 촬영 버튼 활성화)
     threading.Thread(
