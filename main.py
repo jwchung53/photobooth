@@ -49,8 +49,7 @@ def _warmup_analysis(on_ready) -> None:
 
 def _warmup_camera() -> None:
     """Open the camera once to prime the DirectShow backend (reduces first-open
-    latency). Runs while capture is still gated behind model warmup, so there is
-    no contention. Non-fatal on failure."""
+    latency). Non-fatal on failure."""
     log = get_logger("warmup")
     try:
         from src.camera.capture import Camera
@@ -61,6 +60,18 @@ def _warmup_camera() -> None:
         log.info("카메라 워밍업 완료")
     except Exception as exc:  # noqa: BLE001
         log.warning("카메라 워밍업 실패(무시): %s", exc)
+
+
+def _warmup_all(on_ready) -> None:
+    """Warm the camera, then the models, then unlock capture.
+
+    Strictly sequential: DirectShow opens the device exclusively, so the camera
+    must be released before ``on_ready`` lets CaptureScreen open its own stream.
+    Running these in parallel raced - a 1280x720 DSHOW warmup outlasts the model
+    warmup, and the capture screen then found the device busy (blank preview).
+    """
+    _warmup_camera()
+    _warmup_analysis(on_ready)
 
 
 def main() -> int:
@@ -103,11 +114,10 @@ def main() -> int:
             kiosk_utils.hide_cursor()
         window.showFullScreen()
 
-    # 5) 백그라운드 워밍업 (완료 시 촬영 버튼 활성화)
+    # 5) 백그라운드 워밍업 (카메라 -> 모델 순차, 완료 시 촬영 버튼 활성화)
     threading.Thread(
-        target=_warmup_analysis, args=(window.warmup_ready.emit,), daemon=True
+        target=_warmup_all, args=(window.warmup_ready.emit,), daemon=True
     ).start()
-    threading.Thread(target=_warmup_camera, daemon=True).start()
 
     # 6) 실행 + 종료 시 환경 복원
     try:

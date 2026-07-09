@@ -5,10 +5,10 @@ camera:
   index: 0            # 카메라 장치 인덱스 (preferred_name 못 찾으면 폴백)
   preferred_name: "web camera"  # 이 이름 포함 카메라 우선 사용 (대소문자 무시). 빈 값이면 index 사용
   backend: msmf       # dshow | msmf | any(기본 백엔드). 실패하면 나머지 백엔드로 자동 폴백
-  # 외장 Web Camera는 DSHOW로 열리지 않아 msmf 사용. 640x480 전용이라 아래 해상도는
-  # 적용에 실패하면 네이티브로 자동 원복된다. 내장 LGE 캠은 dshow + index 0.
-  width: 1280         # 캡처 해상도 가로
-  height: 720         # 캡처 해상도 세로
+  # 외장 Web Camera는 msmf에서 1440x1080@26fps. dshow로도 열리지만 무압축(YUY2)이라
+  # 720p가 1fps로 떨어져 쓸 수 없다. 내장 LGE 캠은 dshow + index 0.
+  width: 1440         # 캡처 해상도 가로 (4:3 유지 필수 - 프레임 구도가 4:3 기준)
+  height: 1080        # 1280x720을 요청하면 16:9로 나와 하단 띠가 과하게 두꺼워진다
   fps: 30             # 목표 프레임레이트
   warmup_frames: 5    # 노출 안정화를 위해 버릴 초기 프레임 수
 

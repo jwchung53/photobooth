@@ -117,62 +117,66 @@ class CameraThread(QThread):
         log.warning("열렸지만 프레임 없음 (index=%d, backend=%s)", index, label)
         return None
 
-    def _apply_format(self, cap: cv2.VideoCapture) -> bool:
-        """Apply the configured resolution/fps; True if frames still arrive.
+    def _open_at_size(self, index: int, backend: int | None) -> cv2.VideoCapture | None:
+        """Open ``index``/``backend`` only if it streams the configured size.
 
-        Some cameras (e.g. 640x480-only webcams under MSMF) accept the property
-        change but then produce a broken stream, so re-probe after setting it and
-        roll back to the camera's native resolution if it stopped delivering.
+        The resolution MUST be set right after opening, before the first read:
+        changing the format on an already-streaming capture breaks it (MSMF then
+        dies with a broken Mat, DSHOW silently keeps the native size). Setting it
+        first also lets a probe prove the format works - ``get()`` happily
+        reports back a resolution the camera cannot actually stream. A None
+        return means this backend cannot deliver the requested size, so the
+        caller should try another rather than settle for native.
         """
-        native_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        native_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        if (native_w, native_h) == (self.width, self.height):
-            cap.set(cv2.CAP_PROP_FPS, self.fps)
-            return True  # 이미 원하는 해상도 (열 때 프레임 확인 완료)
+        label = backend_label(backend)
+        cap = open_capture(index, backend)
+        if not cap.isOpened():
+            cap.release()
+            log.warning("카메라 열기 실패 (index=%d, backend=%s)", index, label)
+            return None
 
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
         cap.set(cv2.CAP_PROP_FPS, self.fps)
         if self._probe(cap):
-            return True
+            log.info("카메라 열림 (index=%d, backend=%s, %dx%d)",
+                     index, label, self.width, self.height)
+            return cap
 
-        log.warning(
-            "%dx%d 적용 후 프레임 없음 -> 네이티브 %dx%d로 원복",
-            self.width,
-            self.height,
-            native_w,
-            native_h,
-        )
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, native_w)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, native_h)
-        return self._probe(cap)
+        cap.release()
+        log.warning("%dx%d 스트리밍 불가 (backend=%s) -> 다른 백엔드 시도",
+                    self.width, self.height, label)
+        return None
 
     def _open(self) -> cv2.VideoCapture | None:
-        """Open a camera that actually delivers frames.
+        """Open a camera that actually delivers frames at the configured size.
 
         Pass 1 exhausts every backend (config 우선 → dshow → msmf → 기본) on the
         selected index, because that index is the camera we actually want - some
-        webcams only open under MSMF. Only if none work does pass 2 fall back to
-        auto-detecting a different index.
+        webcams only open under MSMF, and some only stream high resolutions under
+        DSHOW. Pass 2 auto-detects a different index. Only if no backend can
+        deliver the configured resolution do we settle for the native one, since
+        an upscaled 640x480 still visibly degrades the print.
         """
         backends = _backend_order(self.backend)
 
-        # 1단계: 원하는 카메라를 모든 백엔드로 시도
+        # 1단계: 원하는 카메라 + 원하는 해상도
         for backend in backends:
-            cap = self._try_open(self.camera_index, backend)
+            cap = self._open_at_size(self.camera_index, backend)
             if cap is not None:
                 self.active_backend = backend
                 return cap
 
-        # 2단계: 그래도 안 되면 다른 인덱스 자동 탐색 (다른 카메라로 대체)
+        # 2단계: 다른 인덱스 자동 탐색 (다른 카메라로 대체), 역시 원하는 해상도로
         log.warning(
-            "index=%d를 어떤 백엔드로도 열지 못함 -> 다른 카메라 탐색", self.camera_index
+            "index=%d를 %dx%d로 열지 못함 -> 다른 카메라 탐색",
+            self.camera_index, self.width, self.height,
         )
         for backend in backends:
             idx = find_available_camera(backend=backend)
             if idx is None or idx == self.camera_index:
                 continue
-            cap = self._try_open(idx, backend)
+            cap = self._open_at_size(idx, backend)
             if cap is not None:
                 log.warning(
                     "원하던 카메라 대신 index=%d로 대체 (backend=%s)",
@@ -183,22 +187,27 @@ class CameraThread(QThread):
                 self.active_backend = backend
                 return cap
 
+        # 3단계: 해상도를 포기하고 네이티브로라도 스트리밍 (화질 저하 경고)
+        for backend in backends:
+            cap = self._try_open(self.camera_index, backend)
+            if cap is not None:
+                self.active_backend = backend
+                log.warning(
+                    "%dx%d를 지원하는 백엔드가 없음 -> 네이티브 %dx%d로 진행 (인쇄 화질 저하)",
+                    self.width, self.height,
+                    int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
+                    int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)),
+                )
+                return cap
+
         log.error("모든 백엔드(DSHOW/MSMF/기본)로 카메라를 열지 못했습니다")
         return None
 
     def run(self) -> None:  # QThread 진입점 (별도 스레드)
-        cap = self._open()
+        cap = self._open()  # 해상도 적용/검증까지 끝난 캡처
         if cap is None:
             self.error.emit("카메라를 찾을 수 없어요. USB 연결을 확인해주세요.")
             return
-
-        if not self._apply_format(cap):
-            # 원복해도 프레임이 안 나오면 스트림이 완전히 깨진 것 -> 재오픈
-            cap.release()
-            cap = self._try_open(self.camera_index, self.active_backend)
-            if cap is None:
-                self.error.emit("카메라를 시작할 수 없어요. USB 연결을 확인해주세요.")
-                return
 
         log.info(
             "카메라 스트림 시작 (index=%d, backend=%s, %dx%d)",

@@ -81,16 +81,17 @@ class Camera:
         cap.set(cv2.CAP_PROP_FPS, self.fps)
         self._cap = cap
 
-        actual_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        actual_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        # get()은 카메라가 실제로 스트리밍하지 못하는 포맷도 그대로 되돌려준다.
+        # 프레임을 한 장 읽어야 진짜 해상도를 알 수 있다.
+        ok, frame = cap.read()
+        actual = f"{frame.shape[1]}x{frame.shape[0]}" if ok and frame is not None else "읽기 실패"
         log.info(
-            "카메라 열림 (index=%d, backend=%s, 요청=%dx%d, 실제=%dx%d)",
+            "카메라 열림 (index=%d, backend=%s, 요청=%dx%d, 실제=%s)",
             self.index,
             backend_label(self.active_backend),
             self.width,
             self.height,
-            actual_w,
-            actual_h,
+            actual,
         )
         return self
 
