@@ -20,6 +20,7 @@ PAPER_SIZES_MM = {
     "4x6": (101.6, 152.4),
     "5x7": (127.0, 178.0),
     "L": (89.0, 127.0),
+    "89x119": (89.0, 119.0),  # 실전 용지. 프레임(89:119)과 비율이 정확히 같다
 }
 
 try:
@@ -77,7 +78,7 @@ class PrinterManager:
         if devmode is None:
             raise PrinterError("프린터 설정(DEVMODE)을 가져올 수 없습니다")
 
-        # 방향 (사진이 가로라 기본 landscape)
+        # 방향 (프레임이 세로라 config는 portrait)
         devmode.Orientation = (
             win32con.DMORIENT_LANDSCAPE if orientation == "landscape"
             else win32con.DMORIENT_PORTRAIT

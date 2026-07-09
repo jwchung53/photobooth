@@ -47,12 +47,13 @@ print:
   enabled: true
   copies_per_person: 1
   printer_name: ""          # 빈 값 = 기본 프린터 (Canon G6000 series)
-  paper_size: "A4"          # A4 | 4x6 | 5x7 | L
+  paper_size: "89x119"      # A4 | 4x6 | 5x7 | L | 89x119
   orientation: "portrait"   # 프레임이 세로(89:119)라 portrait
-  fit_mode: "fit"           # fit=전체 보이게(여백) / fill=꽉 차게(일부 잘림)
-  borderless: false
-# 용지 변경: 오늘 A4 테스트 -> paper_size:"A4", fit_mode:"fit", borderless:false
-#            내일 4x6 실전  -> paper_size:"4x6", fit_mode:"fill", borderless:true
+  fit_mode: "fill"          # fit=전체 보이게(여백) / fill=꽉 차게(일부 잘림)
+  borderless: true
+# 용지 변경: A4 테스트   -> paper_size:"A4",      fit_mode:"fit",  borderless:false
+#            89x119 실전 -> paper_size:"89x119", fit_mode:"fill", borderless:true
+#            89x119 용지는 프레임과 비율이 같아 fill이어도 잘리지 않는다
 
 kiosk:
   idle_timeout_ms: 60000       # 무입력 시 대기 화면 복귀까지 (60초)
