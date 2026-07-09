@@ -1,9 +1,12 @@
-"""Compositor - polaroid-style: full group photo on top + bottom color band.
+"""Compositor - polaroid: group photo on an emotion-colored card.
 
-For each detected person, ``compose_individual`` makes a 6x4 (1800x1200) image:
-the FULL original group photo on top (1800x1000, aspect kept, never cropped,
-white letterbox), a bottom emotion-pastel band (1800x200) with the booth title,
-and that person's face highlighted with a dark-accent rectangle + emoji label.
+For each detected person, ``compose_individual`` makes a portrait 89:119
+(1424x1904) image: the whole canvas is the emotion pastel color and the FULL
+original landscape photo (aspect kept, never cropped) is scaled to the 1364px
+width and pinned near the top, leaving a 30px border at the sides and 220px on
+top. Everything below the photo is the thick bottom band carrying the booth
+title; that person's face is highlighted with a dark-accent rectangle + emoji
+label.
 All results share the same photo - only the highlighted face differs.
 """
 
@@ -18,10 +21,22 @@ from src.utils.logger import get_logger
 
 log = get_logger(__name__)
 
-# ---- 레이아웃 (가로 6x4) ------------------------------------------------
-CANVAS_W, CANVAS_H = 1800, 1200
-PHOTO_W, PHOTO_H = 1800, 1000     # 상단 사진 영역 (전체 폭)
-BAND_Y = 1000                     # 하단 색 띠 시작 y (높이 200)
+# ---- 레이아웃 (폴라로이드, 세로 89:119) ----------------------------------
+# 캔버스 전체가 감정 색. 가로 사진을 폭에 맞춰 위쪽에 붙이고, 남는 아래를
+# 통째로 텍스트 띠로 쓴다 -> 옆 < 상단 << 하단 (고전 폴라로이드 실루엣).
+CANVAS_W, CANVAS_H = 1424, 1904   # 89:119 세로형, 고해상도 인쇄용
+SIDE_W = 30                       # 좌/우 색 여백 폭 (제일 얇게)
+TOP_H = 220                       # 상단 색 여백 높이 (옆보다는 두껍게)
+MIN_BOTTOM_H = 300                # 하단 색 띠 최소 높이 (텍스트 공간 보장)
+PHOTO_X0 = SIDE_W                 # 사진 영역 좌측 경계 (30)
+PHOTO_X1 = CANVAS_W - SIDE_W      # 사진 영역 우측 경계 (1394)
+PHOTO_Y0 = TOP_H                  # 사진 영역 상단 경계 (220)
+PHOTO_W = PHOTO_X1 - PHOTO_X0     # 1364 (가로 사진은 항상 이 폭을 꽉 채움)
+PHOTO_MAX_H = CANVAS_H - TOP_H - MIN_BOTTOM_H  # 1384 (세로 사진 상한)
+_BUBBLE_MARGIN = 16               # 말풍선이 사진 영역 안에서 유지할 여백
+_TITLE_SIZE = 80                  # 하단 제목 폰트 크기
+_LABEL_SIZE = 40                  # 감정 라벨 폰트 크기
+_BOX_WIDTH = 14                   # 얼굴 강조 사각형 테두리 두께
 
 # ---- 파스텔 프레임 색 / 진한 강조 색 / 라벨 -----------------------------
 EMOTION_COLORS = {   # 연한 파스텔 (프레임 배경)
@@ -62,56 +77,60 @@ def compose_individual(
     all_faces: list[dict] | None = None,
     category: str | None = None,
 ) -> Image.Image:
-    """One 6x4 image: full photo on top + emotion color band + face highlight."""
+    """One 89:119 polaroid: photo on an emotion-colored card + face highlight."""
     cat = category or target_face.get("category", DEFAULT_FRAME)
     band_color = _hex(EMOTION_COLORS.get(cat, EMOTION_COLORS["chill"]))
     accent = _hex(EMOTION_ACCENT.get(cat, EMOTION_ACCENT["chill"]))
 
-    canvas = Image.new("RGB", (CANVAS_W, CANVAS_H), (255, 255, 255))  # 흰 배경
+    # 캔버스 전체가 감정 색 = 폴라로이드 대지. 사방 여백/하단 띠가 한 번에 칠해진다.
+    canvas = Image.new("RGB", (CANVAS_W, CANVAS_H), band_color)
     draw = ImageDraw.Draw(canvas)
 
-    # 원본 단체사진 - 상단 1800x1000에 비율 유지 리사이즈 (crop 금지, 여백 흰색)
+    # 원본 단체사진 - 폭 1364에 맞춰 비율 유지 리사이즈 후 상단에 붙임 (crop 금지).
+    # 세로로 긴 원본만 높이 상한에 걸려 좌우 레터박스가 생긴다.
     photo = Image.fromarray(cv2.cvtColor(original_photo, cv2.COLOR_BGR2RGB))
     pw, ph = photo.size
-    scale = min(PHOTO_W / pw, PHOTO_H / ph)
+    scale = min(PHOTO_W / pw, PHOTO_MAX_H / ph)
     rw, rh = int(pw * scale), int(ph * scale)
     resized = photo.resize((rw, rh), Image.LANCZOS)
-    ox = (PHOTO_W - rw) // 2
-    oy = (PHOTO_H - rh) // 2
+    ox = PHOTO_X0 + (PHOTO_W - rw) // 2
+    oy = PHOTO_Y0
     canvas.paste(resized, (ox, oy))
 
-    # 하단 감정 색 띠 (y=1000~1200) + 중앙 제목 (80px 흰색 굵게)
-    draw.rectangle([0, BAND_Y, CANVAS_W, CANVAS_H], fill=band_color)
-    tfont = _font(_BOLD_FONT, 80) or _font(_LABEL_FONT, 80)
+    # 사진 아래 남은 영역 전체가 하단 띠 (이미 배경색) - 중앙 제목만 (80px 흰색 굵게)
+    band_y = oy + rh
+    tfont = _font(_BOLD_FONT, _TITLE_SIZE) or _font(_LABEL_FONT, _TITLE_SIZE)
     if tfont:
-        cy = (BAND_Y + CANVAS_H) // 2
+        cy = (band_y + CANVAS_H) // 2
         # 가독성 위해 옅은 그림자 후 흰 글자
         draw.text((CANVAS_W // 2 + 2, cy + 2), _TITLE, font=tfont,
                   fill=(0, 0, 0), anchor="mm")
         draw.text((CANVAS_W // 2, cy), _TITLE, font=tfont,
                   fill=(255, 255, 255), anchor="mm")
 
-    # 대상 얼굴 강조 사각형 (사진 안, 진한 accent, 12px, 얼굴보다 20px 크게)
+    # 대상 얼굴 강조 사각형 (사진 안, 진한 accent, 14px, 얼굴보다 20px 크게)
     x, y, w, h = target_face["bbox"]
     rx, ry = ox + int(x * scale), oy + int(y * scale)
     rbw, rbh = int(w * scale), int(h * scale)
     pad = 20
-    draw.rectangle([rx - pad, ry - pad, rx + rbw + pad, ry + rbh + pad], outline=accent, width=12)
+    draw.rectangle([rx - pad, ry - pad, rx + rbw + pad, ry + rbh + pad],
+                   outline=accent, width=_BOX_WIDTH)
 
     # 사각형 옆 감정 말풍선 (감정 accent 색 + 흰 글자, 꼬리는 얼굴 쪽)
     emoji, ko = EMOTION_LABELS.get(cat, ("", cat))
-    font = _font(_LABEL_FONT, 45)
-    efont = _font(_EMOJI_FONT, 45)
-    tw = int(draw.textlength(ko, font=font)) if font else len(ko) * 45
-    ew = 56 if efont else 0
+    font = _font(_LABEL_FONT, _LABEL_SIZE)
+    efont = _font(_EMOJI_FONT, _LABEL_SIZE)
+    tw = int(draw.textlength(ko, font=font)) if font else len(ko) * _LABEL_SIZE
+    ew = 50 if efont else 0
     ipad = 22
-    bw, bh = ew + tw + ipad * 2, 45 + ipad
+    bw, bh = ew + tw + ipad * 2, _LABEL_SIZE + ipad
     side = "right"
     bx, by = rx + rbw + pad + 26, ry - pad
-    if bx + bw > CANVAS_W - 16:                    # 오른쪽 공간 없으면 왼쪽
+    if bx + bw > PHOTO_X1 - _BUBBLE_MARGIN:        # 오른쪽 공간 없으면 왼쪽
         side, bx = "left", rx - pad - bw - 26
-        if bx < 16:                                # 왼쪽도 없으면 사각형 위
+        if bx < PHOTO_X0 + _BUBBLE_MARGIN:         # 왼쪽도 없으면 사각형 위
             side, bx, by = "top", rx - pad, ry - pad - bh - 26
+    by = max(by, PHOTO_Y0 + _BUBBLE_MARGIN)        # 상단 색 여백 침범 방지
     draw.rounded_rectangle([bx, by, bx + bw, by + bh], radius=bh // 3, fill=accent)
     cy = by + bh // 2
     if side == "right":
@@ -122,7 +141,7 @@ def compose_individual(
         mx = bx + bw // 2
         draw.polygon([(mx - 16, by + bh), (mx + 16, by + bh), (mx, by + bh + 22)], fill=accent)
 
-    tx, ty = bx + ipad, by + (bh - 45) // 2
+    tx, ty = bx + ipad, by + (bh - _LABEL_SIZE) // 2
     if efont:
         try:
             draw.text((tx, ty - 4), emoji, font=efont, embedded_color=True)

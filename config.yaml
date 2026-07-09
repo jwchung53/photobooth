@@ -35,8 +35,8 @@ analysis:
   neutral_bias: 0.2               # neutral 점수 가중치 (<1이면 무표정 억제 -> 표정 더 잘 살림)
 
 compose:
-  output_size: [1800, 1200]      # 결과 캔버스 px (6x4 inch @ 300dpi, 가로형)
-  border: 48                     # 프레임 테두리 두께(px)
+  output_size: [1424, 1904]      # 결과 캔버스 px (세로 89:119, 고해상도 인쇄용)
+  border: 30                     # 프레임 테두리 두께(px, 상단 220 / 하단은 남는 공간 전부)
   draw_face_labels: true         # 얼굴별 감정 라벨 표시 여부
   font: "C:/Windows/Fonts/malgun.ttf"  # 한글 지원 폰트 (맑은 고딕)
 
@@ -48,7 +48,7 @@ print:
   copies_per_person: 1
   printer_name: ""          # 빈 값 = 기본 프린터 (Canon G6000 series)
   paper_size: "A4"          # A4 | 4x6 | 5x7 | L
-  orientation: "landscape"  # 사진이 가로라 landscape
+  orientation: "portrait"   # 프레임이 세로(89:119)라 portrait
   fit_mode: "fit"           # fit=전체 보이게(여백) / fill=꽉 차게(일부 잘림)
   borderless: false
 # 용지 변경: 오늘 A4 테스트 -> paper_size:"A4", fit_mode:"fit", borderless:false
