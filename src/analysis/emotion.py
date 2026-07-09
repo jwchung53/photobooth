@@ -15,20 +15,21 @@ from src.utils.logger import get_logger
 
 log = get_logger(__name__)
 
-# DeepFace 7감정 -> 5 프레임 카테고리 (모든 결과가 긍정적으로 보이도록)
+# DeepFace 7감정 -> 6 프레임 카테고리 (모든 결과가 긍정적으로 보이도록)
+# fear는 chill에서 분리해 독립 카테고리(판타지 컨셉)로 재해석
 EMOTION_TO_FRAME: dict[str, str] = {
     "happy": "joy",
     "surprise": "wow",
     "sad": "calm",
     "angry": "cool",
     "disgust": "cool",
-    "fear": "chill",
+    "fear": "fear",
     "neutral": "chill",
 }
 DEFAULT_FRAME = "chill"
 
 # 다인 촬영 시 대표 프레임 선정 tie-break 우선순위 (긍정 우선)
-FRAME_PRIORITY: list[str] = ["joy", "wow", "chill", "calm", "cool"]
+FRAME_PRIORITY: list[str] = ["joy", "wow", "fear", "chill", "calm", "cool"]
 
 # 감정 한글 표기 (콘솔/디버그/UI 라벨용)
 EMOTION_KO: dict[str, str] = {
@@ -243,53 +244,48 @@ class EmotionAnalyzer:
         log.info("감정 분석 완료: 얼굴 %d개 검출", len(faces))
         return faces
 
+    @staticmethod
+    def _expressiveness(scores: dict) -> float:
+        """Strength of the strongest NON-neutral emotion (표정이 얼마나 뚜렷한가)."""
+        return max((v for k, v in scores.items() if k != "neutral"), default=0.0)
+
     def analyze_stabilized(self, frames: list) -> list["FaceResult"]:
-        """Detect on the last frame, then vote each face's emotion across the
-        burst of frames (emotion-only crops - cheap) to reduce single-frame noise.
+        """Analyze a few frames properly (detect+align) and, per face, adopt the
+        reading with the strongest non-neutral expression (peak). This surfaces a
+        brief smile/surprise instead of averaging everything toward neutral.
         """
         if not frames:
             return []
-        primary = frames[-1]
-        faces = self.analyze(primary)  # 검출 + 기본 감정 + 후처리
-        extra = frames[:-1]
-        if not faces or not extra:
-            return faces
+        n = len(frames)
+        # 균등하게 최대 3프레임만 제대로 분석 (속도) - 마지막이 대표
+        idxs = sorted(set([0, n // 2, n - 1]))
+        per_frame = [self.analyze(frames[i]) for i in idxs]
+        primary = per_frame[-1]
+        others = per_frame[:-1]
+        if not primary or not others:
+            return primary
 
-        try:
-            from deepface import DeepFace
-        except Exception:  # noqa: BLE001
-            return faces
+        for face in primary:
+            best_scores = face.scores
+            best_expr = self._expressiveness(face.scores)
+            for other in others:
+                # 같은 얼굴(IoU)을 찾아 표정이 더 강하면 채택
+                match = None
+                best_iou = 0.3
+                for g in other:
+                    iou = self._iou(face.box, g.box)
+                    if iou > best_iou:
+                        best_iou, match = iou, g
+                if match is not None:
+                    expr = self._expressiveness(match.scores)
+                    if expr > best_expr:
+                        best_expr, best_scores = expr, match.scores
+            face.scores = best_scores
+            face.dominant_emotion = self._pick_dominant(best_scores)
+            face.frame_category = map_emotion_to_frame(face.dominant_emotion)
 
-        for face in faces:
-            x, y, w, h = face.box
-            acc = {k: float(v) for k, v in face.scores.items()}  # primary 포함
-            votes = 1
-            for fr in extra:
-                fh, fw = fr.shape[:2]
-                cx1, cy1 = max(0, x), max(0, y)
-                cx2, cy2 = min(fw, x + w), min(fh, y + h)
-                if cx2 - cx1 < 20 or cy2 - cy1 < 20:
-                    continue
-                crop = fr[cy1:cy2, cx1:cx2]
-                try:
-                    r = DeepFace.analyze(
-                        crop, actions=["emotion"], detector_backend="skip",
-                        enforce_detection=False, silent=True,
-                    )
-                    scores = (r[0] if isinstance(r, list) else r).get("emotion", {})
-                    for k, v in scores.items():
-                        acc[k] = acc.get(k, 0.0) + float(v)
-                    votes += 1
-                except Exception:  # noqa: BLE001
-                    continue
-            if votes > 1 and acc:
-                averaged = {k: val / votes for k, val in acc.items()}
-                dominant = self._pick_dominant(averaged)  # neutral 억제 반영
-                face.dominant_emotion = dominant
-                face.frame_category = map_emotion_to_frame(dominant)
-                face.scores = averaged
-        log.info("감정 안정화: %d프레임 투표", len(frames))
-        return faces
+        log.info("감정 안정화: %d프레임 중 표정 강한 것 채택", len(idxs))
+        return primary
 
 
 if __name__ == "__main__":

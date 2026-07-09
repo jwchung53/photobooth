@@ -28,7 +28,7 @@ analysis:
   min_face_area_pct: 0.8          # 절대 하한: 이미지 대비 이 % 미만은 무시 (최대 얼굴 제외, 순수 노이즈 제거)
   dedup_iou: 0.4                  # 이 값 이상 겹치는 박스는 중복으로 보고 통합
   emotion_frames: 5               # 감정 안정화: 셔터 순간 이 수만큼 프레임을 투표 (1이면 단일)
-  neutral_bias: 0.5               # neutral 점수 가중치 (<1이면 무표정 억제 -> 표정 더 잘 살림)
+  neutral_bias: 0.2               # neutral 점수 가중치 (<1이면 무표정 억제 -> 표정 더 잘 살림)
 
 compose:
   output_size: [1800, 1200]      # 결과 캔버스 px (6x4 inch @ 300dpi, 가로형)

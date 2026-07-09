@@ -76,7 +76,11 @@ class AnalysisThread(QThread):
                 for f in faces
             ]
             self.progress.emit(100, "완료!")
-            log.info("분석 완료: 얼굴 %d명", len(results))
+            log.info(
+                "분석 완료: %d명 감정=%s",
+                len(results),
+                [f"{r['emotion']}({r['category']})" for r in results],
+            )
             self.finished_all.emit(results)
 
         except Exception as exc:  # noqa: BLE001 - 크래시 절대 금지

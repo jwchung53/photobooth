@@ -27,6 +27,7 @@ FRAME_STYLES: dict[str, dict] = {
     "calm": {"label": "차분", "accent": (86, 149, 214), "concept": "블루"},
     "cool": {"label": "쿨", "accent": (58, 61, 84), "concept": "다크·불꽃"},
     "chill": {"label": "여유", "accent": (139, 168, 136), "concept": "미니멀 자연톤"},
+    "fear": {"label": "판타지", "accent": (126, 87, 194), "concept": "신비·판타지 (보라빛)"},
 }
 
 

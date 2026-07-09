@@ -15,14 +15,15 @@ USB 웹캠으로 다중 인원 촬영 → 얼굴별 감정 분석 → 감정별 
 - 사운드: pygame.mixer
 
 ## 감정 → 프레임 매핑
-DeepFace 7감정을 5개 프레임 카테고리로 재매핑:
-- happy → joy (꽃, 폭죽, 따뜻한 톤)
-- surprise → wow (별, 반짝이)
-- sad → calm (블루)
-- angry, disgust → cool (다크 + 불꽃)
-- fear, neutral → chill (미니멀 자연톤)
+DeepFace 7감정을 6개 프레임 카테고리로 재매핑:
+- happy → joy (기쁨: 꽃, 폭죽, 따뜻한 톤)
+- surprise → wow (놀람: 별, 반짝이)
+- sad → calm (슬픔: 블루)
+- angry, disgust → cool (분노: 다크 + 불꽃)
+- neutral → chill (무표정: 미니멀 자연톤)
+- fear → fear (두려움: 신비·판타지 컨셉, 보라빛)
 
-원칙: 모든 감정 결과가 사용자에게 긍정적으로 보이도록.
+원칙: 6개 카테고리 모두 사용자에게 긍정적으로 보이도록 (fear도 판타지 컨셉으로 재해석).
 
 ## 프로젝트 구조
 photobooth/
