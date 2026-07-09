@@ -38,7 +38,7 @@ EMOTION_LABELS = {
 }
 FRAME_CATEGORIES = list(EMOTION_COLORS.keys())
 
-_TITLE = "2026 화동제 감정 부스"
+_TITLE = "2026 화동제 감정 포토부스"
 _LABEL_FONT = "C:/Windows/Fonts/malgun.ttf"
 _BOLD_FONT = "C:/Windows/Fonts/malgunbd.ttf"
 _EMOJI_FONT = "C:/Windows/Fonts/seguiemj.ttf"

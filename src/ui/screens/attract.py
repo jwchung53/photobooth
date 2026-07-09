@@ -23,9 +23,9 @@ class AttractScreen(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addStretch(2)
 
-        title = QLabel("감정 포토부스")
+        title = QLabel("2026 화동제 감정 포토부스")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title.setStyleSheet(theme.label_style(80, theme.WHITE))
+        title.setStyleSheet(theme.label_style(58, theme.WHITE))
         layout.addWidget(title)
 
         self.subtitle = QLabel("친구들과 함께 찍어보세요!")
