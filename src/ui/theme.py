@@ -28,7 +28,6 @@ COUNTDOWN_INTERVAL_MS = 1000
 FLASH_MS = 500
 PROGRESS_TICK_MS = 30           # 진행바 1틱 간격
 PROGRESS_STEPS = 100            # 0~100 -> 총 3초 (30ms * 100)
-PRINT_COUNT = 6                 # 인쇄 매수(더미)
 THANK_YOU_RETURN_MS = 5000      # "감사합니다!" 후 대기화면 복귀까지
 
 
