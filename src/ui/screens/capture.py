@@ -40,9 +40,12 @@ class CaptureScreen(QWidget):
         super().__init__()
         theme.apply_background(self, theme.DARK)
         cfg = get_config()
-        self.camera = CameraThread(camera_index=int(cfg.get("camera.index", 0)))
+        # 인덱스를 넘기지 않아야 CameraThread가 preferred_name 이름 매칭을 사용
+        # (가상 카메라가 index 0을 차지하는 경우가 있음)
+        self.camera = CameraThread()
         self.sound = SoundPlayer()
 
+        self._first_frame_seen = False  # 첫 프레임 도착 전에는 카운트다운 금지
         self._prepare_ms = int(float(cfg.get("capture.prepare_seconds", 5)) * 1000)
         self._countdown_start = int(cfg.get("capture.countdown_seconds", 3))
         self.count = self._countdown_start
@@ -115,13 +118,14 @@ class CaptureScreen(QWidget):
         self.flash.hide()
         self.count = self._countdown_start
         self._camera_attempts = 0
+        self._first_frame_seen = False
 
         self.camera.frame_ready.connect(self.update_preview)
         self.camera.error.connect(self.on_camera_error)
         self.camera.begin()
 
-        # 5초 준비 후 카운트다운 시작
-        self._prepare_timer.start(self._prepare_ms)
+        # 준비 타이머는 첫 프레임이 들어온 뒤 시작 (카메라 오픈이 느린 백엔드 대비).
+        # 그 전에 카운트다운이 돌면 검은 프레임이 찍힌다.
 
     def hideEvent(self, event) -> None:
         super().hideEvent(event)
@@ -140,6 +144,11 @@ class CaptureScreen(QWidget):
     # ---- 프레임 표시 ---------------------------------------------------
     def update_preview(self, frame: np.ndarray) -> None:
         """Slot: show a live BGR frame (runs on the UI thread - keep light)."""
+        if not self._first_frame_seen:
+            self._first_frame_seen = True
+            log.info("첫 프레임 수신 -> 준비 타이머 시작")
+            self._prepare_timer.start(self._prepare_ms)
+
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         h, w, ch = rgb.shape
         img = QImage(rgb.data, w, h, ch * w, QImage.Format.Format_RGB888)
@@ -168,6 +177,7 @@ class CaptureScreen(QWidget):
         if not self.isVisible():
             return
         log.info("카메라 재시도 %d/%d", self._camera_attempts, self._camera_max)
+        self._first_frame_seen = False
         self.camera.stop()
         self.camera.begin()
 

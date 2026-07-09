@@ -107,7 +107,7 @@ class MainWindow(QMainWindow):
         self.analysis.analysis_complete.connect(self.on_analysis_complete)
         self.analysis.analysis_failed.connect(lambda: self._go(self.attract))
         self.analysis.retake.connect(lambda: self._go(self.capture))
-        self.preview.print_start.connect(lambda: self._go(self.printing))
+        self.preview.print_start.connect(self.on_print)
         self.preview.restart.connect(lambda: self._go(self.attract))
         self.printing.return_to_attract.connect(lambda: self._go(self.attract))
 
@@ -142,6 +142,16 @@ class MainWindow(QMainWindow):
             self._go(self.preview)
         except Exception:  # noqa: BLE001
             log.exception("결과 표시 오류")
+            self._recover_to_attract()
+
+    def on_print(self) -> None:
+        """Hand the preview images to the printing screen and show it."""
+        try:
+            self.printing.set_images(self.preview.images)
+            log.info("인쇄 요청 (%d장) -> 인쇄 화면", len(self.preview.images))
+            self._go(self.printing)
+        except Exception:  # noqa: BLE001
+            log.exception("인쇄 전환 오류")
             self._recover_to_attract()
 
     def _recover_to_attract(self) -> None:

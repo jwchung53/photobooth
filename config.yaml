@@ -2,7 +2,11 @@
 # 모든 튜닝 값은 여기서 관리한다 (코드 하드코딩 금지)
 
 camera:
-  index: 1            # 카메라 장치 인덱스 (0=Mirametrix 가상카메라, 1=실제 LGE 웹캠)
+  index: 0            # 카메라 장치 인덱스 (preferred_name 못 찾으면 폴백)
+  preferred_name: "web camera"  # 이 이름 포함 카메라 우선 사용 (대소문자 무시). 빈 값이면 index 사용
+  backend: msmf       # dshow | msmf | any(기본 백엔드). 실패하면 나머지 백엔드로 자동 폴백
+  # 외장 Web Camera는 DSHOW로 열리지 않아 msmf 사용. 640x480 전용이라 아래 해상도는
+  # 적용에 실패하면 네이티브로 자동 원복된다. 내장 LGE 캠은 dshow + index 0.
   width: 1280         # 캡처 해상도 가로
   height: 720         # 캡처 해상도 세로
   fps: 30             # 목표 프레임레이트
@@ -38,6 +42,17 @@ compose:
 
 pipeline:
   countdown: 3                   # 촬영 전 카운트다운 초
+
+print:
+  enabled: true
+  copies_per_person: 1
+  printer_name: ""          # 빈 값 = 기본 프린터 (Canon G6000 series)
+  paper_size: "A4"          # A4 | 4x6 | 5x7 | L
+  orientation: "landscape"  # 사진이 가로라 landscape
+  fit_mode: "fit"           # fit=전체 보이게(여백) / fill=꽉 차게(일부 잘림)
+  borderless: false
+# 용지 변경: 오늘 A4 테스트 -> paper_size:"A4", fit_mode:"fit", borderless:false
+#            내일 4x6 실전  -> paper_size:"4x6", fit_mode:"fill", borderless:true
 
 kiosk:
   idle_timeout_ms: 60000       # 무입력 시 대기 화면 복귀까지 (60초)

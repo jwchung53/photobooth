@@ -48,6 +48,7 @@ class PreviewScreen(QWidget):
     def __init__(self) -> None:
         super().__init__()
         theme.apply_background(self, theme.WHITE)
+        self.images: list = []  # 합성 결과(인쇄용)
         self._build()
 
     def _build(self) -> None:
@@ -107,7 +108,9 @@ class PreviewScreen(QWidget):
             images = compose_all(photo, faces_info)
         except Exception:  # noqa: BLE001
             log.exception("미리보기 합성 실패")
+            self.images = []
             return
+        self.images = images  # 인쇄용 보관
         for idx, img in enumerate(images):
             pix = _pil_to_qpixmap(img).scaledToWidth(
                 cell_w, Qt.TransformationMode.SmoothTransformation
