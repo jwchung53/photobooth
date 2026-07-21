@@ -1,0 +1,24 @@
+frame_mapper.py에서 fear를 chill과 분리해서 독립 카테고리로 만들어줘. CLAUDE.md도 6개 카테고리로 업데이트.
+
+## 변경 사항
+
+### frame_mapper.py
+- 기존: fear → chill
+- 변경: fear → fear (독립)
+- neutral → chill (그대로)
+
+### CLAUDE.md 감정 매핑 섹션 업데이트
+- happy → joy (기쁨)
+- surprise → wow (놀람)
+- sad → calm (슬픔)
+- angry, disgust → cool (분노)
+- neutral → chill (무표정)
+- fear → fear (두려움) ← 신규!
+
+원칙: 6개 카테고리 모두 긍정 프레임으로 표현 (fear도 판타지 컨셉으로 재해석)
+
+### assets/frames/fear.png 자리 준비
+- 아직 이미지 없어도 됨 (곧 만들 예정)
+- 기본 placeholder는 dummy_frames.py에서 생성 가능
+
+작업 완료 후 간단히 요약해줘.

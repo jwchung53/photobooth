@@ -1,0 +1,153 @@
+compositor.py 대폭 수정. 사진 + 하단 색 띠 스타일 (폴라로이드st).
+
+## 레이아웃
+- 전체 캔버스: 1800x1200 (가로 6x4, 300DPI)
+- 사진 영역: 상단 1800x1000 (원본 단체사진)
+- 색 띠 영역: 하단 1800x200 (감정 색 + 텍스트)
+
+## 핵심 사항
+
+### 1. 원본 단체사진 절대 자르지 않음 (중요!)
+- 사진 영역(1800x1000)에 원본 리사이즈
+- 비율 유지 (KeepAspectRatio)
+- 얼굴별 crop 절대 금지
+- 모든 결과의 사진 부분 동일 (강조만 다름)
+- 여백 생기면 흰색
+
+### 2. 하단 색 띠
+- 위치: y=1000부터 1200까지 (높이 200px)
+- 색상: 감정별 파스텔
+- 색 띠 전체를 감정 색으로 채움
+
+### 3. 색 띠 중앙 텍스트
+- "화동제 감정 부스"
+- 크기: 80px
+- 색: 흰색 #FFFFFF
+- 굵게
+- 색 띠 정중앙 (가로세로 가운데)
+
+## 파스텔 색상
+
+프레임/띠 색상 (연한 파스텔):
+EMOTION_COLORS = {
+    'joy': '#FFE99A',    # 연노랑
+    'wow': '#FFD9A0',    # 연주황
+    'calm': '#A8D0F0',   # 연하늘
+    'cool': '#F5A9B0',   # 연분홍
+    'chill': '#D8D8D8',  # 연회색
+    'fear': '#D4A5DB',   # 연보라
+}
+
+강조 사각형/라벨 색상 (진한 버전, 가독성):
+EMOTION_ACCENT = {
+    'joy': '#E6A800',
+    'wow': '#E68A2E',
+    'calm': '#4D96FF',
+    'cool': '#E63946',
+    'chill': '#808080',
+    'fear': '#9C27B0',
+}
+
+감정 라벨:
+EMOTION_LABELS = {
+    'joy': ('😊', '행복'),
+    'wow': ('😲', '놀람'),
+    'calm': ('😢', '슬픔'),
+    'cool': ('😠', '분노'),
+    'chill': ('😐', '무표정'),
+    'fear': ('😱', '두려움'),
+}
+
+## compose_individual 함수
+
+def compose_individual(original_photo, target_face, all_faces, category):
+    # 1. 캔버스 1800x1200 (흰색 기본)
+    canvas = Image.new('RGB', (1800, 1200), 'white')
+    draw = ImageDraw.Draw(canvas)
+    
+    # 2. 사진 영역(1800x1000)에 원본 리사이즈 (자르지 않음!)
+    resized = resize_keep_aspect(original_photo, 1800, 1000)
+    photo_x = (1800 - resized.width) // 2
+    photo_y = (1000 - resized.height) // 2
+    canvas.paste(resized, (photo_x, photo_y))
+    
+    # 3. 하단 색 띠 (y=1000~1200)
+    draw.rectangle([0, 1000, 1800, 1200], fill=EMOTION_COLORS[category])
+    
+    # 4. 색 띠 중앙에 "화동제 감정 부스"
+    draw.text((900, 1100), "화동제 감정 부스",
+              font=title_font_80_bold, fill='white', anchor='mm')
+    
+    # 5. target_face bbox를 리사이즈 좌표로 변환
+    scale_x = resized.width / original_photo.width
+    scale_y = resized.height / original_photo.height
+    x1, y1, x2, y2 = target_face['bbox']
+    nx1 = int(x1 * scale_x) + photo_x
+    ny1 = int(y1 * scale_y) + photo_y
+    nx2 = int(x2 * scale_x) + photo_x
+    ny2 = int(y2 * scale_y) + photo_y
+    
+    # 6. 얼굴 강조 사각형 (사진 안, 진한 색)
+    padding = 20
+    draw.rectangle(
+        [nx1-padding, ny1-padding, nx2+padding, ny2+padding],
+        outline=EMOTION_ACCENT[category], width=12
+    )
+    
+    # 7. 사각형 우측에 이모지 + 라벨
+    emoji, label = EMOTION_LABELS[category]
+    draw.text((nx2+padding+15, ny1-padding), f"{emoji} {label}",
+              font=label_font_45, fill=EMOTION_ACCENT[category])
+    
+    return canvas
+
+## compose_all 함수
+
+def compose_all(original_photo, faces_info):
+    results = []
+    for face in faces_info:
+        result = compose_individual(
+            original_photo,  # 매번 같은 원본!
+            target_face=face,
+            all_faces=faces_info,
+            category=face['category']
+        )
+        results.append(result)
+    return results
+
+## preview.py 수정
+
+def set_results(photo, faces_info):
+    results = compose_all(photo, faces_info)
+    # 가로 사진 그리드
+    # 1명:1x1, 2명:2x1, 3~4명:2x2, 5~6명:3x2
+    display_grid(results)
+
+## 폰트
+- 제목: C:/Windows/Fonts/malgunbd.ttf (맑은 고딕 굵게) 80px
+- 라벨: C:/Windows/Fonts/malgun.ttf 45px
+- 이모지: C:/Windows/Fonts/seguiemj.ttf (없으면 텍스트만)
+
+## 완료 기준
+- 원본 단체사진 그대로 유지 (자르지 않음!)
+- 사진은 상단 1000px, 색 띠는 하단 200px
+- 색 띠는 감정별 파스텔
+- 색 띠 중앙에 "화동제 감정 부스" (80px 흰색 굵게)
+- 얼굴 강조 사각형 (사진 안, 진한 색, 12px)
+- 사각형 옆 이모지 + 라벨
+- 인원수만큼 사진 생성
+- 매 사진 같은 배경, 강조만 다름
+
+## 예시 (3명: A=happy, B=surprise, C=fear)
+- 사진1: 상단 단체사진(A얼굴 진노랑 강조 + 😊행복), 하단 연노랑 띠 "화동제 감정 부스"
+- 사진2: 같은 단체사진(B얼굴 진주황 강조 + 😲놀람), 하단 연주황 띠
+- 사진3: 같은 단체사진(C얼굴 진보라 강조 + 😱두려움), 하단 연보라 띠
+
+## 절대 주의
+- 사진 crop 금지, 원본 리사이즈만
+- 얼굴 bbox는 리사이즈 비율로 변환
+- 색 띠는 하단 200px에만
+- 텍스트 흰색으로 잘 보이게
+- 파스텔은 연하게, 강조/라벨은 진하게
+
+작업 시작 시 어떻게 구현할지 설명해줘.

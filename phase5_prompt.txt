@@ -1,0 +1,129 @@
+Phase 5 시작해줘. CLAUDE.md 참고. 인쇄 모듈 구현.
+
+목표: 미리보기에서 [인쇄하기] 누르면 인원수만큼 사진을 Canon PIXMA G 시리즈로 출력. 용지 크기는 config에서 쉽게 변경 가능하게 (오늘 A4 테스트, 내일 4x6).
+
+## 프린터 정보
+- Canon PIXMA G 시리즈 (잉크젯)
+- 오늘: A4 테스트
+- 내일: 4x6 인화지
+- 우리 사진: 1800x1200 (가로 3:2)
+
+## 작업
+
+### 1. src/print/printer.py (신규)
+
+#### 기술
+- pywin32 (win32print, win32ui, win32con)
+- PIL ImageWin.Dib
+
+#### 용지 크기 지원 (핵심!)
+- config.yaml의 paper_size 읽어서 자동 설정
+- 지원 크기:
+  * "A4": 210x297mm
+  * "4x6": 101.6x152.4mm
+  * "5x7": 127x178mm
+  * "L": 89x127mm
+- 각 크기별 DEVMODE 용지 설정
+- 크기 바꿔도 코드 수정 없이 config만
+
+#### PrinterManager 클래스
+- get_default_printer()
+- list_printers()
+- print_image(pil_image, paper_size, copies=1):
+  * paper_size에 맞춰 용지 설정
+  * 이미지를 용지에 맞춰 배치
+  * fit_mode에 따라 (fill/fit)
+- print_multiple(images, paper_size)
+
+#### 용지별 처리
+- A4: 사진을 중앙 배치 (비율 달라 여백 생김) - 테스트용
+- 4x6: 사진 꽉 차게 (비율 맞음) - 실전용
+- fit_mode:
+  * "fit": 전체 보이게 (여백 O) - A4 테스트 적합
+  * "fill": 꽉 차게 (일부 잘림) - 4x6 적합
+
+#### 인쇄 로직
+- win32print로 프린터 열기
+- DEVMODE 용지 크기 설정 (paper_size 기반)
+- 방향: 가로 (landscape, 사진이 가로니까)
+- win32ui.CreateDC
+- GetDeviceCaps로 인쇄 영역
+- 이미지 리사이즈 (fit 또는 fill)
+- StartDoc/StartPage/draw/EndPage/EndDoc
+
+#### 에러 처리
+- 프린터 없음, 용지 없음 등 친절한 안내
+- 크래시 X
+
+### 2. src/print/print_thread.py (신규)
+- QThread 인쇄
+- progress, finished, error 시그널
+- config에서 paper_size 읽어서 사용
+
+### 3. src/ui/screens/printing.py 업그레이드
+- 실제 인쇄 통합
+- set_images(images)
+- 진행 표시 "3장 중 1장..."
+- 완료/에러 처리
+
+### 4. src/ui/screens/preview.py
+- [인쇄하기] → 인원수만큼 전달 → printing
+
+### 5. main_window.py
+- preview → printing 이미지 전달
+
+### 6. config.yaml 인쇄 설정 (중요!)
+print:
+  enabled: true
+  copies_per_person: 1
+  printer_name: ""  # 빈 값=기본 프린터
+  paper_size: "A4"  # 오늘 테스트: A4, 내일: 4x6
+  orientation: "landscape"  # 가로
+  fit_mode: "fit"  # A4는 fit(여백), 4x6은 fill(꽉)
+  borderless: false  # A4는 false, 4x6은 true
+
+## 용지 변경 방법 (주석으로 안내)
+# 오늘 A4 테스트:
+#   paper_size: "A4"
+#   fit_mode: "fit"
+#   borderless: false
+#
+# 내일 4x6 실전:
+#   paper_size: "4x6"
+#   fit_mode: "fill"
+#   borderless: true
+
+## 인쇄 방식
+- 인원수만큼 (미리보기 이미지 개수)
+- 각 1장씩
+- config의 paper_size 따라 용지 자동
+
+## 완료 기준
+- 프린터 감지
+- config paper_size="A4"로 A4 인쇄 확인
+- 사진이 A4 중앙에 잘 나옴 (여백 있어도 OK)
+- [인쇄하기] → 인원수만큼 출력
+- 진행 표시
+- 완료 후 대기 복귀
+- config만 바꾸면 4x6도 가능하게
+
+## 테스트 순서
+1. 프린터 감지 코드 (uv run -m src.print.printer)
+2. A4로 1장 테스트 (혼자 촬영)
+3. 여백/배치 확인
+4. 여러 장 테스트
+
+## 제약
+- QThread 인쇄
+- 크래시 X
+- config로 용지 크기 유연하게
+- pywin32 사용
+
+## 중요
+- 용지 크기를 config에서 쉽게 바꿀 수 있게 (핵심!)
+- 오늘 A4, 내일 4x6 전환이 config 한 줄로
+- 먼저 프린터 감지 코드부터
+- A4 fit 모드로 여백 두고 안전하게 테스트
+
+작업 시작 시 설명하고, 프린터 감지 코드부터 만들어줘.
+
